@@ -9,6 +9,7 @@ from libmproxy.protocol.http import decoded
 from tabulate import tabulate
 
 from recordpeeker import Equipment, ITEMS, BATTLES, DUNGEONS, slicedict, best_equipment
+from recordpeeker.dispatcher import Dispatcher
 
 def get_display_name(enemy):
     for child in enemy["children"]:
@@ -110,18 +111,30 @@ def handle_battle_list(data):
         tbl.append([battle["id"], dungeon_id, battle["name"], battle["stamina"]])
     print tabulate(tbl, headers="firstrow")
 
+def handle_survival_event(data):
+    # XXX: This maybe works for all survival events...
+    enemy = data.get("enemy", dict(name="???", memory_factor="0"))
+    name = enemy.get("name", "???")
+    factor = float(enemy.get("memory_factor", "0"))
+    print "Your next opponent is {0} (x{1:.1f})".format(name, factor)
+
 def start(context, argv):
     global args
     
-    from command_line import parse_args
-    split_args = shlex.split(argv[1], False, os.name == "Posix")
-    args = parse_args(split_args)
-    ip = socket.gethostbyname(socket.gethostname())
-    ip = "" if ip == '127.0.0.1' else ip + ", "
+    from recordpeeker.command_line import parse_args
+    args = parse_args(argv)
+    ips = set([ii[4][0] for ii in socket.getaddrinfo(socket.gethostname(), None) if ii[4][0] != "127.0.0.1"])
     print "Configure your phone's proxy to point to this computer, then visit mitm.it"
     print "on your phone to install the interception certificate.\n"
-    print "Record Peeker is listening on {0}port {1}.\n".format(ip, args.port)
+    print "Record Peeker is listening on port {0}, on these addresses:".format(args.port)
+    print "\n".join(["  * {0}".format(ip) for ip in ips])
+    print ""
     print "Try entering the Party screen, or starting a battle."
+
+    global dp
+    dp = Dispatcher('ffrk.denagames.com')
+    [dp.register(path, function) for path, function in handlers]
+    [dp.ignore(path, regex) for path, regex in ignored_requests]
 
 def print_data(data):
     print json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
@@ -131,6 +144,7 @@ handlers = [
     ('/dff/party/list', handle_party_list),
     ('/dff/world/dungeons', handle_dungeon_list),
     ('/dff/world/battles', handle_battle_list),
+    ('/dff/event/coliseum/6/get_data', handle_survival_event)
 ]
 
 ignored_requests = [
@@ -140,32 +154,7 @@ ignored_requests = [
     ('/dff/battle/?timestamp', False),
 ]
 
-def is_request_ignored(path):
-    for ignored in ignored_requests:
-        # The second value indicates whether it should be an exact
-        # match (True) or substring match (False)
-        if ignored[1] and (ignored[0] == path):
-            return True
-        if (not ignored[1]) and (ignored[0] in path):
-            return True
-    return False
-
 def response(context, flow):
     global args
-    if flow.request.pretty_host(hostheader=True).endswith('ffrk.denagames.com'):
-        if args.verbosity >= 1:
-            print flow.request.path
-        if not is_request_ignored(flow.request.path):
-            with decoded(flow.response):
-                handler = next((x for x in handlers if x[0] in flow.request.path), None)
-                if handler == None:
-                    # When verbosity is >= 2, print the content of unknown requests
-                    if args.verbosity >= 2:
-                        data = json.loads(flow.response.content)
-                        print_data(data)
-                else:
-                    data = json.loads(flow.response.content)
-                    # When verbosity is >= 3, also print the content of known requests
-                    if args.verbosity >= 3:
-                        print_data(data)
-                    handler[1](data)
+    global dp
+    dp.handle(flow, args)

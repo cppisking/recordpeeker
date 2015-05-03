@@ -1,14 +1,12 @@
 import argparse
 import os
 import json
-from subprocess import call
 import sys
 
 def parse_args(argv):
     parser = argparse.ArgumentParser("Test")
     parser.add_argument("--port", "-p", type=int, default=8080, help="Specify the port recordpeeker runs on")
-    parser.add_argument("--verbosity", "-v", default=0, type=int, choices=[0,1,2,3])
-    parser.add_argument("--single-process", "-s", default=False, action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--verbosity", "-v", default=0, type=int, choices=[0,1,2,3], help="Spews more info. 1: prints the path of each request. 2: prints the content of unknown requests. 3: Also print the content of known requests.")
     return parser.parse_args(argv[1:])
 
 def launch():
@@ -16,14 +14,14 @@ def launch():
 
     # This is just here so that --help returns the arguments
     args = parse_args(sys.argv)
-    arglist = " ".join(sys.argv[1:])
-    if args.single_process:
-        sys.argv = [sys.argv[0], '-s "{0}" "{1}"'.format(script, arglist), '-q']
-        from libmproxy.main import mitmdump
-        mitmdump()
+    if sys.argv[1:]:
+        arglist = " ".join(sys.argv[1:])
+        scriptargs = '-s "{0}" "{1}"'.format(script, arglist)
     else:
-        command = [sys.executable, 'mitmdump_shim.py', '-s "{0}" "{1}"'.format(script, arglist), '-q']
-        call(command)
+        scriptargs = '-s "{0}"'.format(script)
+    sys.argv = [sys.argv[0], scriptargs, '-q']
+    from libmproxy.main import mitmdump
+    mitmdump()
 
 if __name__ == '__main__':
     launch()
