@@ -98,7 +98,7 @@ def handle_dungeon_list(data):
     print tabulate(tbl, headers="firstrow")
 
 def handle_battle_list(data):
-    tbl = [["Name", "Id", "Rounds"]]
+    tbl = [["Id", "Dungeon", "Name", "Stamina"]]
     dungeon_data = data["dungeon_session"]
     dungeon_id = dungeon_data["dungeon_id"]
     dungeon_name = dungeon_data["name"]
@@ -107,7 +107,7 @@ def handle_battle_list(data):
     print "Entering dungeon {0} ({1})".format(dungeon_name, "Elite" if dungeon_type==2 else "Normal")
     battles = data["battles"]
     for battle in battles:
-        tbl.append([battle["name"], battle["id"], battle["round_num"]])
+        tbl.append([battle["id"], dungeon_id, battle["name"], battle["stamina"]])
     print tabulate(tbl, headers="firstrow")
 
 def start(context, argv):
@@ -123,8 +123,11 @@ def start(context, argv):
     print "Record Peeker is listening on {0}port {1}.\n".format(ip, args.port)
     print "Try entering the Party screen, or starting a battle."
 
+def print_data(data):
+    print json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
+
 handlers = [
-    ('/dff/battle/get_battle_init_data' , handle_get_battle_init_data),
+    ('/get_battle_init_data' , handle_get_battle_init_data),
     ('/dff/party/list', handle_party_list),
     ('/dff/world/dungeons', handle_dungeon_list),
     ('/dff/world/battles', handle_battle_list),
@@ -159,10 +162,10 @@ def response(context, flow):
                     # When verbosity is >= 2, print the content of unknown requests
                     if args.verbosity >= 2:
                         data = json.loads(flow.response.content)
-                        print json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
+                        print_data(data)
                 else:
                     data = json.loads(flow.response.content)
                     # When verbosity is >= 3, also print the content of known requests
                     if args.verbosity >= 3:
-                        print json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
+                        print_data(data)
                     handler[1](data)
